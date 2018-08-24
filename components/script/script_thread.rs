@@ -461,6 +461,7 @@ pub struct ScriptThread {
 
     /// The channel on which the image cache can send messages to ourself.
     image_cache_channel: Sender<ImageCacheMsg>,
+
     /// For providing contact with the time profiler.
     time_profiler_chan: time::ProfilerChan,
 
@@ -520,6 +521,10 @@ pub struct ScriptThread {
 
     /// The Webrender Document ID associated with this thread.
     webrender_document: DocumentId,
+
+    /// History information visible from this origin (see notes in constellation.rs).
+    /// This is used for :visited styling.
+    history: HashSet<ServoUrl>,
 }
 
 /// In the event of thread panic, all data on the stack runs its destructor. However, there
@@ -923,6 +928,8 @@ impl ScriptThread {
             custom_element_reaction_stack: CustomElementReactionStack::new(),
 
             webrender_document: state.webrender_document,
+
+            history: HashSet::new(),
         }
     }
 
@@ -1340,6 +1347,8 @@ impl ScriptThread {
                 self.handle_update_history_state_msg(pipeline_id, history_state_id, url),
             ConstellationControlMsg::RemoveHistoryStates(pipeline_id, history_states) =>
                 self.handle_remove_history_states(pipeline_id, history_states),
+            ConstellationControlMsg::MarkUrlVisited(url) =>
+                self.handle_mark_url_visited(url),
             ConstellationControlMsg::FocusIFrame(parent_pipeline_id, frame_id) =>
                 self.handle_focus_iframe_msg(parent_pipeline_id, frame_id),
             ConstellationControlMsg::WebDriverScriptCommand(pipeline_id, msg) =>
@@ -1739,6 +1748,13 @@ impl ScriptThread {
         match { self.documents.borrow().find_window(pipeline_id) } {
             None => return warn!("update history state after pipeline {} closed.", pipeline_id),
             Some(window) => window.History().r().remove_states(history_states),
+        }
+    }
+
+    fn handle_mark_url_visited(&mut self, url: ServoUrl) {
+        let _ = self.history.insert(url);
+        for doc in self.documents.borrow_mut().iter() {
+            doc.update_visited_flags(&self.history);
         }
     }
 

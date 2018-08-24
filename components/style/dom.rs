@@ -645,11 +645,7 @@ pub trait TElement:
     }
 
     /// Returns true if this element is a visited link.
-    ///
-    /// Servo doesn't support visited styles yet.
-    fn is_visited_link(&self) -> bool {
-        false
-    }
+    fn is_visited_link(&self) -> bool;
 
     /// Returns true if this element is in a native anonymous subtree.
     fn is_in_native_anonymous_subtree(&self) -> bool {

@@ -163,8 +163,10 @@ bitflags! {
         #[doc = "Specifies whether this node is focusable and whether it is supposed \
                  to be reachable with using sequential focus navigation."]
         const SEQUENTIALLY_FOCUSABLE = 1 << 3;
+        #[doc = "Specifies whether this node is a visited link."]
+        const IS_VISITED_LINK = 1 << 4;
 
-        // There are two free bits here.
+        // There is one free bit here.
 
         #[doc = "Specifies whether the parser has set an associated form owner for \
                  this element. Only applicable for form-associatable elements."]

@@ -392,6 +392,9 @@ pub struct Document {
     salvageable: Cell<bool>,
     /// Whether the unload event has already been fired.
     fired_unload: Cell<bool>,
+    /// List of link elements in the document (so we can set the
+    /// NodeFlags::IS_VISITED_LINK flag on them)
+    link_elements: Vec<Element>,  // should be DomRefCell<>? (just bc most other members of this struct are)
 }
 
 #[derive(JSTraceable, MallocSizeOf)]
@@ -2221,6 +2224,16 @@ impl Document {
         let counter = self.throw_on_dynamic_markup_insertion_counter.get();
         self.throw_on_dynamic_markup_insertion_counter.set(counter - 1);
     }
+
+    pub fn update_visited_flags(&self, history: &HashSet<ServoUrl>) {
+        for el in self.link_elements {
+            if let Some(attr) = el.get_attribute_by_name("href".to_string()) {
+                if let AttrValue::ResolvedUrl(_, Some(url)) = *attr.value() {  // TODO: is ResolvedUrl the appropriate arm of the enum
+                    el.as_node().node.set_flag(NodeFlags::IS_VISITED_LINK, history.contains(&url));
+                }
+            }
+        }
+    }
 }
 
 #[derive(MallocSizeOf, PartialEq)]
@@ -2465,7 +2478,8 @@ impl Document {
             throw_on_dynamic_markup_insertion_counter: Cell::new(0),
             page_showing: Cell::new(false),
             salvageable: Cell::new(true),
-            fired_unload: Cell::new(false)
+            fired_unload: Cell::new(false),
+            link_elements: Vec::new(),  // TODO: how to actually populate this
         }
     }
 

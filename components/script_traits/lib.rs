@@ -298,6 +298,8 @@ pub enum ConstellationControlMsg {
     UpdateHistoryState(PipelineId, Option<HistoryStateId>, ServoUrl),
     /// Removes inaccesible history states.
     RemoveHistoryStates(PipelineId, Vec<HistoryStateId>),
+    /// Marks the given url as 'visited' for the purposes of :visited styling.
+    MarkUrlVisited(ServoUrl),
     /// Set an iframe to be focused. Used when an element in an iframe gains focus.
     /// PipelineId is for the parent, BrowsingContextId is for the nested browsing context
     FocusIFrame(PipelineId, BrowsingContextId),
@@ -355,6 +357,7 @@ impl fmt::Debug for ConstellationControlMsg {
             UpdatePipelineId(..) => "UpdatePipelineId",
             UpdateHistoryState(..) => "UpdateHistoryState",
             RemoveHistoryStates(..) => "RemoveHistoryStates",
+            MarkUrlVisited(..) => "MarkUrlVisited",
             FocusIFrame(..) => "FocusIFrame",
             WebDriverScriptCommand(..) => "WebDriverScriptCommand",
             TickAllAnimations(..) => "TickAllAnimations",

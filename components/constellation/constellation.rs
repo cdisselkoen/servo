@@ -274,6 +274,13 @@ pub struct Constellation<Message, LTF, STF> {
 
     joint_session_histories: HashMap<TopLevelBrowsingContextId, JointSessionHistory>,
 
+    /// Tracking browsing history merely for the purposes of CSS :visited
+    /// styling.  Roughly follows the proposal at
+    /// https://github.com/w3c/csswg-drafts/issues/3012; this means that any
+    /// given history entry is tagged with which origins are allowed to
+    /// observe it.
+    unified_visited_history: HashMap<ServoUrl, Vec<ImmutableOrigin>>,
+
     /// The set of all the pipelines in the browser.
     /// (See the `pipeline` module for more details.)
     pipelines: HashMap<PipelineId, Pipeline>,
@@ -603,6 +610,7 @@ where
                     swmanager_sender: sw_mgr_clone,
                     event_loops: HashMap::new(),
                     joint_session_histories: HashMap::new(),
+                    unified_visited_history: HashMap::new(),
                     pipelines: HashMap::new(),
                     browsing_contexts: HashMap::new(),
                     pending_changes: vec![],
@@ -1668,6 +1676,7 @@ where
         }
         self.joint_session_histories
             .insert(top_level_browsing_context_id, JointSessionHistory::new());
+        self.update_visited_history(None, url);
         self.new_pipeline(
             pipeline_id,
             browsing_context_id,
@@ -2094,8 +2103,66 @@ where
                     new_pipeline_id: new_pipeline_id,
                     replace,
                 });
+                let src_url = self.pipelines.get(&source_id).map(|p| p.url.clone());
+                self.update_visited_history(src_url, load_data.url);
                 Some(new_pipeline_id)
             },
+        }
+    }
+
+    fn update_visited_history(&mut self, src_url: Option<ServoUrl>, dest_url: ServoUrl) {
+        let src_origin = src_url.clone().map(|u| u.origin());
+        let dest_origin = dest_url.clone().origin();
+        {
+            let dest_vec = self.unified_visited_history
+                .entry(dest_url.clone())
+                .or_insert(Vec::new());
+            dest_vec.push(dest_origin.clone());
+            if let Some(url) = src_url.clone() {
+                dest_vec.push(url.origin());
+            }
+        }
+        {
+            if let Some(url) = src_url.clone() {
+                self.unified_visited_history
+                    .entry(url)
+                    .or_insert(Vec::new())  // shouldn't be necessary
+                    .push(dest_origin.clone());
+            }
+        }
+
+        // Send an update to any script thread that is "allowed" to see it based on its origin
+        for (host, weak_event_loop) in self.event_loops.iter() {
+            // TODO: for now we only check that the host matches, should check full origin
+
+            // Send update if the script thread is associated with the dest origin
+            let mut send_update = false;
+            if let Some(ImmutableOrigin::Tuple(_, origin_host, _)) = src_origin.clone() {
+                if origin_host == *host {
+                    send_update = true;
+                }
+            }
+            // Also send update if the script thread is associated with the src origin
+            if let ImmutableOrigin::Tuple(_, origin_host, _) = dest_origin.clone() {
+                if origin_host == *host {
+                    send_update = true;
+                }
+            }
+
+            if send_update {
+                if let Some(rc) = weak_event_loop.upgrade() {
+                    let msg = ConstellationControlMsg::MarkUrlVisited(dest_url.clone());
+                    let result = match Rc::try_unwrap(rc) {
+                        Ok(event_loop) => event_loop.send(msg),
+                        Err(_) => panic!("unable to send history update message")  // TODO don't panic (obviously)
+                    };
+                    if let Err(e) = result {
+                        self.handle_send_error(panic!("what to put for first arg here?"), e);
+                    }
+                } else {
+                    panic!("unable to send history update message")  // TODO don't panic (obviously)
+                }
+            }
         }
     }
 
@@ -2557,6 +2624,18 @@ where
 
         let session_history = self.get_joint_session_history(top_level_browsing_context_id);
         session_history.replace_history_state(pipeline_id, history_state_id, url);
+    }
+
+    /// is `targeturl` visited, as viewable from the `current` origin
+    fn is_visited(
+        &self,
+        targeturl: &ServoUrl,
+        current: &ImmutableOrigin,
+    ) -> bool {
+        match self.unified_visited_history.get(targeturl) {
+            None => false,
+            Some(ref origins) => origins.contains(&current)
+        }
     }
 
     fn handle_key_msg(&mut self, ch: Option<char>, key: Key, state: KeyState, mods: KeyModifiers) {

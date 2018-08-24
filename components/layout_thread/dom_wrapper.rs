@@ -463,6 +463,10 @@ impl<'le> TElement for ServoLayoutElement<'le> {
         self.as_node().node.set_flag(NodeFlags::HAS_DIRTY_DESCENDANTS, false)
     }
 
+    fn is_visited_link(&self) -> bool {
+        unsafe { self.as_node().node.get_flag(NodeFlags::IS_VISITED_LINK) }
+    }
+
     fn store_children_to_process(&self, n: isize) {
         let data = self.get_style_data().unwrap();
         data.parallel.children_to_process.store(n, Ordering::Relaxed);

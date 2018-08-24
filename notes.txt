@@ -1,0 +1,41 @@
+is_visited_link() in dom.rs returns false
+is called in style_adjuster.rs by adjust_for_visited() (which sets ComputedValueFlags::IS_RELEVANT_LINK_VISITED on self.style)
+  which is called by StyleAdjuster::adjust()
+    which is called in properties.mako.rs by apply_declarations()
+      which is called in three places: in stylist.rs by Stylist::compute_for_declarations()
+        which appears to not be called in Servo; and a note in style_adjuster.rs seems to imply this is only for Gecko
+      and also in animation.rs by compute_style_for_animation_step()
+        which is called (twice) by update_style_for_animation()
+          which is called in matching.rs by update_animations_for_cascade()
+            which is called by process_animations() [NOTE issue#20116]
+              which is called in several places. At this point I don't think the animations code is critical, we should start with the common case
+      and also in properties.mako.rs by cascade_rules()
+        which is called in two places: in cascade() (as distinguished from CustomPropertiesBuilder::cascade())
+          (This is a major function, mentioned in docs/components/style.md)
+            which is called in stylist.rs by cascade_style_and_visited()
+              which is called in two places: by compute_pseudo_element_style_with_inputs()
+                TODO
+              and also in style_resolver.rs by its own cascade_style_and_visited()
+                which is called by several callers in that file: by cascade_styles_with_default_parents()
+                  which is called (twice) in traversal.rs by compute_style()
+                    TODO
+                and also by cascade_style_and_visited_with_default_parents()
+                    TODO
+                and also by resolve_pseudo_style()
+                    TODO
+                and also by cascade_primary_style()
+                    which is called by two callers: by resolve_primary_style()
+                      which is called in two places: in the pub struct method resolve_style() on StyleResolverForElement
+                        which is called in two places: in the pub function resolve_style() in style/traversal.rs
+                          [see below]
+                        and also by resolve_style_with_default_parents()
+                          TODO
+                      and also in the pub function resolve_style() in style/traversal.rs
+                        which is called in layout/query.rs by process_resolved_style_request()
+                          which is called in layout_thread/lib.rs by respond_to_query_if_necessary(), a method on the LayoutThread struct
+                    and also by cascade_styles_with_default_parents()
+                      TODO
+        and also in apply_declarations()
+          [see line 4-5]
+and is also called in style/sharing/mod.rs
+  which surrounding comments clearly indicate isn't the main code path, just an optimization
